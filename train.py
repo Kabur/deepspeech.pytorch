@@ -240,11 +240,20 @@ if __name__ == '__main__':
                 break
             inputs, targets, input_percentages, target_sizes = data
             input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
+
+            print("input_sizes: ", input_sizes)
+            print("targets.data:")
+            print(targets.data)
+
             # measure data loading time
             data_time.update(time.time() - end)
             inputs = inputs.to(device)
 
             out, output_sizes = model(inputs, input_sizes)
+            print("output_sizes: ", output_sizes)
+            print("out.data:")
+            print(out.data)
+
             out = out.transpose(0, 1)  # TxNxH
 
             float_out = out.float()  # ensure float32 for loss
