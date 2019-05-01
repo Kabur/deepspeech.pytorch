@@ -241,18 +241,21 @@ if __name__ == '__main__':
             inputs, targets, input_percentages, target_sizes = data
             input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
 
-            print("input_sizes: ", input_sizes)
-            print("targets.data:")
-            print(targets.data)
 
             # measure data loading time
             data_time.update(time.time() - end)
             inputs = inputs.to(device)
 
             out, output_sizes = model(inputs, input_sizes)
+
+            print("*"*100)
+            print("input_sizes: ", input_sizes)
+            print("targets.data:")
+            print(targets.data)
             print("output_sizes: ", output_sizes)
             print("out.data:")
             print(out.data)
+            print("*"*100)
 
             out = out.transpose(0, 1)  # TxNxH
 
@@ -303,6 +306,8 @@ if __name__ == '__main__':
                                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
                            file_path)
             del loss, out, float_out
+            import time
+            time.sleep(1)
 
         avg_loss /= len(train_sampler)
 
