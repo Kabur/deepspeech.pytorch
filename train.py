@@ -252,6 +252,13 @@ if __name__ == '__main__':
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
 
+            model_save_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
+            print("Saving checkpoint model to %s" % model_save_path)
+            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
+                                            loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
+                       model_save_path)
+
             print("*"*100)
             trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
             # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
@@ -260,7 +267,9 @@ if __name__ == '__main__':
             rnd_index = random.randrange(0, len(train_wavs))
             transcription = []
             transcription.append(train_wavs[rnd_index])
-            txt_file = train_wavs[rnd_index].replace("wav", "txt")
+            wav_file = train_wavs[rnd_index]
+            txt_file = wav_file.replace("wav", "txt")
+
             print(txt_file)
             with open(txt_file, "r") as file:
                 transcription.append(file.read())
@@ -277,7 +286,15 @@ if __name__ == '__main__':
             print("Target:", transcription[1])
             print("Output:", transcription[2])
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
+            # todo: save and delete the model each batch, in order to use the transcribe.py script
+            cmd = "python /home/kabur/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
+            print(cmd)
+            cmd_out = os.popen(cmd).read()
+            print(cmd_out)
+            # cmd = python /home/tomas/deepspeech.pytorch/transcribe.py --model-path /home/tomas/debug_dir/swb_full_1.pth --audio-path /home/tomas/datasets/swb_processed/test/wav/5017_en_A_13.wav""
+
             print("*"*100)
+            exit()
 
             if i == len(train_sampler):
                 break
