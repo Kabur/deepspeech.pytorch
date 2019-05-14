@@ -18,6 +18,10 @@ from logger import VisdomLogger, TensorBoardLogger
 from model import DeepSpeech, supported_rnns
 from utils import convert_model_to_half, reduce_tensor, check_loss
 
+from transcribe import transcribe
+from transcribe import decode_results
+from data.data_loader import SpectrogramParser
+
 parser = argparse.ArgumentParser(description='DeepSpeech training')
 parser.add_argument('--train-manifest', metavar='DIR',
                     help='path to train manifest csv', default='data/train_manifest.csv')
@@ -121,6 +125,13 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
+    # parser.add_argument('--train-manifest', metavar='DIR',
+    #                     help='path to train manifest csv', default='data/train_manifest.csv')
+    import csv
+    train_wavs = []
+    with open(args.train_manifest, "r") as file:
+        for row in file:
+            train_wavs.append(row.split(",")[0])
 
     device = torch.device("cuda" if args.cuda else "cpu")
     if args.mixed_precision and not args.cuda:
@@ -231,11 +242,43 @@ if __name__ == '__main__':
     data_time = AverageMeter()
     losses = AverageMeter()
 
+    if os.path.isfile("debug_transcriptions.csv"):
+        os.remove("debug_transcriptions.csv")
+
     for epoch in range(start_epoch, args.epochs):
+        transcriptions = []
         model.train()
         end = time.time()
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
+
+            print("*"*100)
+            trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
+            # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
+            # audio_path = "/home/kabur/datasets/uhh/swb_processed/val/wav/sw2020A-ms98-a-0004.wav"
+            # random train file
+            rnd_index = random.randrange(0, len(train_wavs))
+            transcription = []
+            transcription.append(train_wavs[rnd_index])
+            txt_file = train_wavs[rnd_index].replace("wav", "txt")
+            print(txt_file)
+            with open(txt_file, "r") as file:
+                transcription.append(file.read())
+
+            decoded_output, decoded_offsets = transcribe(transcription[0], trans_parser, model, decoder, device)
+
+            results = []
+            for b in range(len(decoded_output)):
+                for pi in range(len(decoded_output[b])):
+                    result = {'transcription': decoded_output[b][pi]}
+                    results.append(result)
+            transcription.append(results)
+
+            print("Target:", transcription[1])
+            print("Output:", transcription[2])
+            transcriptions.append(" | ".join([str(thing) for thing in transcription]))
+            print("*"*100)
+
             if i == len(train_sampler):
                 break
             inputs, targets, input_percentages, target_sizes = data
@@ -248,14 +291,20 @@ if __name__ == '__main__':
 
             out, output_sizes = model(inputs, input_sizes)
 
-            print("*"*100)
-            print("input_sizes: ", input_sizes)
-            print("targets.data:")
-            print(targets.data)
-            print("output_sizes: ", output_sizes)
-            print("out.data:")
-            print(out.data)
-            print("*"*100)
+            # print("*"*100)
+            # print("input_sizes: ", input_sizes)
+            # print("*"*100)
+            # print("targets shape: ", targets.shape)
+            # print("targets.data:")
+            # print(targets.data)
+            # print("*"*100)
+            # print("output_sizes: ", output_sizes)
+            # print("out.data:")
+            # print(out.data)
+            # print("*"*100)val
+            # parser.add_argument('--train-manifest', metavar='DIR',
+            #                     help='path to train manifest csv', default='data/train_manifest.csv')
+
 
             out = out.transpose(0, 1)  # TxNxH
 
@@ -306,8 +355,7 @@ if __name__ == '__main__':
                                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
                            file_path)
             del loss, out, float_out
-            import time
-            time.sleep(1)
+
 
         avg_loss /= len(train_sampler)
 
@@ -393,3 +441,8 @@ if __name__ == '__main__':
             if not args.no_shuffle:
                 print("Shuffling batches...")
                 train_sampler.shuffle(epoch)
+
+        with open("debug_transcriptions.csv", "a") as file:
+            file.writelines(transcriptions)
+            file.write("\n")
+
