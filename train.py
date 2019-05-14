@@ -287,7 +287,7 @@ if __name__ == '__main__':
             print("Output:", transcription[2])
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
             # todo: save and delete the model each batch, in order to use the transcribe.py script
-            cmd = "python /home/kabur/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
+            cmd = "python /home/tomas/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
             print(cmd)
             cmd_out = os.popen(cmd).read()
             print(cmd_out)
