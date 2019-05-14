@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import pickle
 import random
 import time
 
@@ -252,17 +253,18 @@ if __name__ == '__main__':
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
 
-            model_save_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
-            print("Saving checkpoint model to %s" % model_save_path)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
-                                            loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
-                       model_save_path)
+            # model_save_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
+            # print("Saving checkpoint model to %s" % model_save_path)
+            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
+            #                                 loss_results=loss_results,
+            #                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
+            #            model_save_path)
 
-            print("*"*100)
+            # print("*"*100)
             trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
             # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
             # audio_path = "/home/kabur/datasets/uhh/swb_processed/val/wav/sw2020A-ms98-a-0004.wav"
+
             # random train file
             rnd_index = random.randrange(0, len(train_wavs))
             transcription = []
@@ -270,7 +272,7 @@ if __name__ == '__main__':
             wav_file = train_wavs[rnd_index]
             txt_file = wav_file.replace("wav", "txt")
 
-            print(txt_file)
+            # print(txt_file)
             with open(txt_file, "r") as file:
                 transcription.append(file.read())
 
@@ -283,18 +285,15 @@ if __name__ == '__main__':
                     results.append(result)
             transcription.append(results)
 
-            print("Target:", transcription[1])
-            print("Output:", transcription[2])
+            # print("Target:", transcription[1])
+            # print("Output:", transcription[2])
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
-            # todo: save and delete the model each batch, in order to use the transcribe.py script
-            cmd = "python /home/tomas/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
-            print(cmd)
-            cmd_out = os.popen(cmd).read()
-            print(cmd_out)
-            # cmd = python /home/tomas/deepspeech.pytorch/transcribe.py --model-path /home/tomas/debug_dir/swb_full_1.pth --audio-path /home/tomas/datasets/swb_processed/test/wav/5017_en_A_13.wav""
-
-            print("*"*100)
-            exit()
+            # delete the batch-model after every batch unless we run out of space quick
+            # cmd = "python /home/tomas/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
+            # print(cmd)
+            # cmd_out = os.popen(cmd).read()
+            # print(cmd_out)
+            # print("*"*100)
 
             if i == len(train_sampler):
                 break
@@ -384,6 +383,7 @@ if __name__ == '__main__':
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
         model.eval()
+        # todo: check if this testing segment outputs text when decoding
         with torch.no_grad():
             for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
                 inputs, targets, input_percentages, target_sizes = data
@@ -436,11 +436,16 @@ if __name__ == '__main__':
                 'Avg CER': cer
             }
 
+
         if main_proc and args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results),
-                       file_path)
+            with open(file_path, "wb+") as file:
+                pickle.dump(model, file)
+
+            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+            #                                 wer_results=wer_results, cer_results=cer_results),
+            #            file_path)
+
         # anneal lr
         param_groups = optimizer.optimizer.param_groups if args.mixed_precision else optimizer.param_groups
         for g in param_groups:
@@ -449,9 +454,12 @@ if __name__ == '__main__':
 
         if main_proc and (best_wer is None or best_wer > wer):
             print("Found better validated model, saving to %s" % args.model_path)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results)
-                       , args.model_path)
+            with open(args.model_path, "wb+") as file:
+                pickle.dump(model, file)
+
+            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+            #                                 wer_results=wer_results, cer_results=cer_results)
+            #            , args.model_path)
             best_wer = wer
 
             avg_loss = 0

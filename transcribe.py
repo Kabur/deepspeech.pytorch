@@ -1,4 +1,5 @@
 import argparse
+import pickle
 import warnings
 
 from opts import add_decoder_args, add_inference_args
@@ -57,13 +58,20 @@ def transcribe(audio_path, parser, model, decoder, device):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DeepSpeech transcription')
     parser = add_inference_args(parser)
+    parser.add_argument('--pickle', dest='pickle', action='store_true', help='Use pickle to load the model')
     parser.add_argument('--audio-path', default='audio.wav',
                         help='Audio file to predict on')
     parser.add_argument('--offsets', dest='offsets', action='store_true', help='Returns time offset information')
     parser = add_decoder_args(parser)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
-    model = load_model(device, args.model_path, args.cuda)
+    if args.pickle:
+        device = "cuda"
+        with open(args.model_path, "rb") as file:
+            model = pickle.load(file)
+    else:
+        model = load_model(device, args.model_path, args.cuda)
+
 
     if args.decoder == "beam":
         from decoder import BeamCTCDecoder
