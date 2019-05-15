@@ -43,6 +43,9 @@ if __name__ == '__main__':
                                   num_workers=args.num_workers)
     total_cer, total_wer, num_tokens, num_chars = 0, 0, 0, 0
     output_data = []
+    non_empty = 0
+    non_white = 0
+    total = 0
     for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
         inputs, targets, input_percentages, target_sizes = data
         input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
@@ -63,6 +66,7 @@ if __name__ == '__main__':
         decoded_output, _ = decoder.decode(out, output_sizes)
         target_strings = target_decoder.convert_to_strings(split_targets)
         for x in range(len(target_strings)):
+            total += 1
             transcript, reference = decoded_output[x][0], target_strings[x][0]
             wer_inst = decoder.wer(transcript, reference)
             cer_inst = decoder.cer(transcript, reference)
@@ -72,8 +76,13 @@ if __name__ == '__main__':
             num_chars += len(reference)
             if args.verbose:
                 print("Ref:", reference.lower())
-                print("Hyp:", transcript.lower())
+                print("Hyp: \"", transcript.lower(), "\"")
                 print("WER:", float(wer_inst) / len(reference.split()), "CER:", float(cer_inst) / len(reference), "\n")
+                if transcript.lower().strip() is not "":
+                    non_white += 1
+                if transcript.lower() is not "":
+                    non_empty += 1
+
 
     wer = float(total_wer) / num_tokens
     cer = float(total_cer) / num_chars
@@ -81,5 +90,8 @@ if __name__ == '__main__':
     print('Test Summary \t'
           'Average WER {wer:.3f}\t'
           'Average CER {cer:.3f}\t'.format(wer=wer * 100, cer=cer * 100))
+    print("non_empty: ", non_empty)
+    print("non_white: ", non_white)
+    print("total: ", total)
     if args.save_output:
         np.save(args.output_path, output_data)
