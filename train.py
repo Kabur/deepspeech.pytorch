@@ -287,6 +287,7 @@ if __name__ == '__main__':
 
             # print("Target:", transcription[1])
             # print("Output:", transcription[2])
+            transcription.append("\n")
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
             # delete the batch-model after every batch unless we run out of space quick
             # cmd = "python /home/tomas/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
@@ -383,7 +384,6 @@ if __name__ == '__main__':
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
         model.eval()
-        # todo: check if this testing segment outputs text when decoding
         with torch.no_grad():
             for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
                 inputs, targets, input_percentages, target_sizes = data
@@ -439,12 +439,12 @@ if __name__ == '__main__':
 
         if main_proc and args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            with open(file_path, "wb+") as file:
-                pickle.dump(model, file)
-
-            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-            #                                 wer_results=wer_results, cer_results=cer_results),
-            #            file_path)
+            # with open(file_path, "wb+") as file:
+            #     pickle.dump(model, file)
+            #
+            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results),
+                       file_path)
 
         # anneal lr
         param_groups = optimizer.optimizer.param_groups if args.mixed_precision else optimizer.param_groups
@@ -454,12 +454,12 @@ if __name__ == '__main__':
 
         if main_proc and (best_wer is None or best_wer > wer):
             print("Found better validated model, saving to %s" % args.model_path)
-            with open(args.model_path, "wb+") as file:
-                pickle.dump(model, file)
-
-            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-            #                                 wer_results=wer_results, cer_results=cer_results)
-            #            , args.model_path)
+            # with open(args.model_path, "wb+") as file:
+            #     pickle.dump(model, file)
+            #
+            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results)
+                       , args.model_path)
             best_wer = wer
 
             avg_loss = 0
