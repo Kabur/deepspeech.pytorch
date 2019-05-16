@@ -308,21 +308,6 @@ if __name__ == '__main__':
 
             out, output_sizes = model(inputs, input_sizes)
 
-            # print("*"*100)
-            # print("input_sizes: ", input_sizes)
-            # print("*"*100)
-            # print("targets shape: ", targets.shape)
-            # print("targets.data:")
-            # print(targets.data)
-            # print("*"*100)
-            # print("output_sizes: ", output_sizes)
-            # print("out.data:")
-            # print(out.data)
-            # print("*"*100)val
-            # parser.add_argument('--train-manifest', metavar='DIR',
-            #                     help='path to train manifest csv', default='data/train_manifest.csv')
-
-
             out = out.transpose(0, 1)  # TxNxH
 
             float_out = out.float()  # ensure float32 for loss
@@ -439,9 +424,6 @@ if __name__ == '__main__':
 
         if main_proc and args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            # with open(file_path, "wb+") as file:
-            #     pickle.dump(model, file)
-            #
             torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
                                             wer_results=wer_results, cer_results=cer_results),
                        file_path)
@@ -454,9 +436,6 @@ if __name__ == '__main__':
 
         if main_proc and (best_wer is None or best_wer > wer):
             print("Found better validated model, saving to %s" % args.model_path)
-            # with open(args.model_path, "wb+") as file:
-            #     pickle.dump(model, file)
-            #
             torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
                                             wer_results=wer_results, cer_results=cer_results)
                        , args.model_path)

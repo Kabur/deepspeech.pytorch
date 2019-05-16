@@ -77,6 +77,7 @@ if __name__ == '__main__':
             if args.verbose:
                 print("Ref:", reference.lower())
                 print("Hyp: \"", transcript.lower(), "\"")
+                print("Hyp_code \"", [ord(c) for c in transcript.lower()], "\"")
                 print("WER:", float(wer_inst) / len(reference.split()), "CER:", float(cer_inst) / len(reference), "\n")
                 if transcript.lower().strip() is not "":
                     non_white += 1
@@ -93,5 +94,6 @@ if __name__ == '__main__':
     print("non_empty: ", non_empty)
     print("non_white: ", non_white)
     print("total: ", total)
+    print("non_white/total ratio: ", non_white / total)
     if args.save_output:
         np.save(args.output_path, output_data)
