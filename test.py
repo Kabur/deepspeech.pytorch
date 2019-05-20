@@ -47,7 +47,7 @@ if __name__ == '__main__':
     non_white = 0
     total = 0
     for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
-        inputs, targets, input_percentages, target_sizes = data
+        inputs, targets, input_percentages, target_sizes, filenames = data
         input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
         inputs = inputs.to(device)
         # unflatten targets
@@ -75,9 +75,10 @@ if __name__ == '__main__':
             num_tokens += len(reference.split())
             num_chars += len(reference)
             if args.verbose:
+                print("Filename: ", filenames[x])
                 print("Ref:", reference.lower())
                 print("Hyp: \"", transcript.lower(), "\"")
-                print("Hyp_code \"", [ord(c) for c in transcript.lower()], "\"")
+                print("Hyp_code", [ord(c) for c in transcript.lower()])
                 print("WER:", float(wer_inst) / len(reference.split()), "CER:", float(cer_inst) / len(reference), "\n")
                 if transcript.lower().strip() is not "":
                     non_white += 1

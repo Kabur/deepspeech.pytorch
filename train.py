@@ -253,13 +253,6 @@ if __name__ == '__main__':
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
 
-            # model_save_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
-            # print("Saving checkpoint model to %s" % model_save_path)
-            # torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
-            #                                 loss_results=loss_results,
-            #                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
-            #            model_save_path)
-
             # print("*"*100)
             trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
             # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
@@ -285,8 +278,8 @@ if __name__ == '__main__':
                     results.append(result)
             transcription.append(results)
 
-            # print("Target:", transcription[1])
-            # print("Output:", transcription[2])
+            print("Target:", transcription[1])
+            print("Output:", transcription[2])
             transcription.append("\n")
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
             # delete the batch-model after every batch unless we run out of space quick
@@ -298,7 +291,7 @@ if __name__ == '__main__':
 
             if i == len(train_sampler):
                 break
-            inputs, targets, input_percentages, target_sizes = data
+            inputs, targets, input_percentages, target_sizes, filenames = data
             input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
 
 
