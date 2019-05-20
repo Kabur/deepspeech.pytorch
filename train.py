@@ -278,8 +278,8 @@ if __name__ == '__main__':
                     results.append(result)
             transcription.append(results)
 
-            print("Target:", transcription[1])
-            print("Output:", transcription[2])
+            # print("Target:", transcription[1])
+            # print("Output:", transcription[2])
             transcription.append("\n")
             transcriptions.append(" | ".join([str(thing) for thing in transcription]))
             # delete the batch-model after every batch unless we run out of space quick
@@ -350,6 +350,9 @@ if __name__ == '__main__':
                                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
                            file_path)
             del loss, out, float_out
+
+            with open("debug_transcriptions.csv", "w+") as file:
+                file.writelines(transcriptions)
 
 
         avg_loss /= len(train_sampler)
@@ -439,7 +442,4 @@ if __name__ == '__main__':
                 print("Shuffling batches...")
                 train_sampler.shuffle(epoch)
 
-        with open("debug_transcriptions.csv", "a") as file:
-            file.writelines(transcriptions)
-            file.write("\n")
 
