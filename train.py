@@ -364,7 +364,7 @@ if __name__ == '__main__':
         model.eval()
         with torch.no_grad():
             for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
-                inputs, targets, input_percentages, target_sizes = data
+                inputs, targets, input_percentages, target_sizes, filenames = data
                 input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
                 inputs = inputs.to(device)
 
