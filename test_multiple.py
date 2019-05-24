@@ -25,11 +25,11 @@ parser = add_decoder_args(parser)
 parser.add_argument('--save-output', action="store_true", help="Saves output of model from test")
 args = parser.parse_args()
 
-def get_first_number(str):
+def get_last_number(str):
     numbers = re.findall(r'\d+', str)
 
     if numbers:
-        return int(numbers[0])
+        return int(numbers[-1])
     else:
         return 0
 
