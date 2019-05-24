@@ -119,7 +119,7 @@ if __name__ == '__main__':
         ratios.append((model_path, ratio))
 
         for item in ratios:
-            print("Model:", item[0])
+            print("Model:", item[0].split("/")[-1])
             print("Ratio:", item[1])
 
         if args.save_output:

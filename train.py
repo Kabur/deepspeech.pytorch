@@ -24,6 +24,7 @@ from transcribe import decode_results
 from data.data_loader import SpectrogramParser
 
 parser = argparse.ArgumentParser(description='DeepSpeech training')
+parser.add_argument('--debug', default=False, action='store_true')
 parser.add_argument('--train-manifest', metavar='DIR',
                     help='path to train manifest csv', default='data/train_manifest.csv')
 parser.add_argument('--val-manifest', metavar='DIR',
@@ -252,7 +253,6 @@ if __name__ == '__main__':
         end = time.time()
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
-
             # print("*"*100)
             trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
             # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
@@ -349,6 +349,44 @@ if __name__ == '__main__':
                                                 loss_results=loss_results,
                                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
                            file_path)
+
+            if args.debug:
+                if i % 1 == 0:
+                    """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
+
+                    non_white = 0
+                    non_empty = 0
+                    total = 0
+                    with torch.no_grad():
+                        for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
+                            inputs, targets, input_percentages, target_sizes, filenames = data
+                            input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
+                            inputs = inputs.to(device)
+
+                            # unflatten targets
+                            split_targets = []
+                            offset = 0
+                            for size in target_sizes:
+                                split_targets.append(targets[offset:offset + size])
+                                offset += size
+
+                            out, output_sizes = model(inputs, input_sizes)
+
+                            decoded_output, _ = decoder.decode(out, output_sizes)
+                            target_strings = decoder.convert_to_strings(split_targets)
+                            for x in range(len(target_strings)):
+                                transcript, reference = decoded_output[x][0], target_strings[x][0]
+                                total += 1
+                                if transcript.lower().strip() is not "":
+                                    non_white += 1
+                                if transcript.lower() is not "":
+                                    non_empty += 1
+                        print("total:", total)
+                        print("Ratio: ", non_white / total)
+
+                    """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
+
+
             del loss, out, float_out
 
             with open("debug_transcriptions.csv", "w+") as file:
@@ -364,6 +402,7 @@ if __name__ == '__main__':
 
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
+        """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
         model.eval()
         non_white = 0
         non_empty = 0
@@ -421,6 +460,8 @@ if __name__ == '__main__':
             'cer_results': cer_results,
             'wer_results': wer_results
         }
+        """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
+
         if args.visdom and main_proc:
             visdom_logger.update(epoch, values)
         if args.tensorboard and main_proc:
