@@ -34,7 +34,7 @@ if __name__ == '__main__':
             model_path = os.path.join(root, file)
             print("Testing:", model_path)
             try:
-                model = load_model(device, args.model_path, args.cuda)
+                model = load_model(device, model_path, args.cuda)
             except Exception as e:
                 print("File " + model_path + " is probably not a model, skipping...")
 
