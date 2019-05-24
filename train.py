@@ -365,6 +365,9 @@ if __name__ == '__main__':
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
         model.eval()
+        non_white = 0
+        non_empty = 0
+        total = 0
         with torch.no_grad():
             for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
                 inputs, targets, input_percentages, target_sizes, filenames = data
@@ -387,6 +390,11 @@ if __name__ == '__main__':
                     transcript, reference = decoded_output[x][0], target_strings[x][0]
                     wer += decoder.wer(transcript, reference) / float(len(reference.split()))
                     cer += decoder.cer(transcript, reference) / float(len(reference))
+                    total += 1
+                    if transcript.lower().strip() is not "":
+                        non_white += 1
+                    if transcript.lower() is not "":
+                        non_empty += 1
                 total_cer += cer
                 total_wer += wer
                 del out
@@ -401,6 +409,10 @@ if __name__ == '__main__':
                   'Average WER {wer:.3f}\t'
                   'Average CER {cer:.3f}\t'.format(
                 epoch + 1, wer=wer, cer=cer))
+            print("non_empty: ", non_empty)
+            print("non_white: ", non_white)
+            print("total: ", total)
+            print("non_white/total ratio: ", non_white / total)
 
         values = {
             'loss_results': loss_results,
