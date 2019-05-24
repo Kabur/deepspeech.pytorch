@@ -43,7 +43,7 @@ if __name__ == '__main__':
         for file in files:
             model_paths.append(os.path.join(root, file))
 
-    model_paths.sort(key=get_first_number)
+    model_paths.sort(key=get_last_number)
 
     for model_path in model_paths:
 
