@@ -24,7 +24,7 @@ from transcribe import decode_results
 from data.data_loader import SpectrogramParser
 
 parser = argparse.ArgumentParser(description='DeepSpeech training')
-parser.add_argument('--debug', default=False, action='store_true')
+parser.add_argument('--debug', default=None, type=int)
 parser.add_argument('--train-manifest', metavar='DIR',
                     help='path to train manifest csv', default='data/train_manifest.csv')
 parser.add_argument('--val-manifest', metavar='DIR',
@@ -351,7 +351,7 @@ if __name__ == '__main__':
                            file_path)
 
             if args.debug:
-                if i % 1 == 0:
+                if i % args.debug == 0:
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
 
                     non_white = 0
