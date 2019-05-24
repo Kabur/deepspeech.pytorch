@@ -351,7 +351,7 @@ if __name__ == '__main__':
                            file_path)
 
             if args.debug:
-                if (args.debug > 0 and i % args.debug == 0) or (args.debug < 0 and len(test_loader) - i <= abs(args.debug)):
+                if (args.debug > 0 and i % args.debug == 0) or (args.debug < 0 and len(train_loader) - i <= abs(args.debug)):
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
 
                     non_white = 0
