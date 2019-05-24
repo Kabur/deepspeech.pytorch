@@ -77,7 +77,7 @@ if __name__ == '__main__':
             if args.verbose:
                 print("Filename: ", filenames[x])
                 print("Ref:", reference.lower())
-                print("Hyp: \"", transcript.lower(), "\"")
+                print("Hyp: \"" + transcript.lower() + "\"")
                 print("Hyp_code", [ord(c) for c in transcript.lower()])
                 print("WER:", float(wer_inst) / len(reference.split()), "CER:", float(cer_inst) / len(reference), "\n")
                 if transcript.lower().strip() is not "":

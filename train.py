@@ -120,7 +120,7 @@ class AverageMeter(object):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-
+    ratios = []
     # Set seeds for determinism
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -409,10 +409,12 @@ if __name__ == '__main__':
                   'Average WER {wer:.3f}\t'
                   'Average CER {cer:.3f}\t'.format(
                 epoch + 1, wer=wer, cer=cer))
+            ratios.append(non_white / total)
             print("non_empty: ", non_empty)
             print("non_white: ", non_white)
             print("total: ", total)
             print("non_white/total ratio: ", non_white / total)
+            print("all ratios:", ratios)
 
         values = {
             'loss_results': loss_results,
