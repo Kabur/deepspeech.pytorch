@@ -351,11 +351,10 @@ if __name__ == '__main__':
                            file_path)
 
             if args.debug:
-                if i % args.debug == 0:
+                if (args.debug > 0 and i % args.debug == 0) or (args.debug < 0 and len(test_loader) - i <= abs(args.debug)):
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
 
                     non_white = 0
-                    non_empty = 0
                     total = 0
                     with torch.no_grad():
                         for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
@@ -379,10 +378,14 @@ if __name__ == '__main__':
                                 total += 1
                                 if transcript.lower().strip() is not "":
                                     non_white += 1
-                                if transcript.lower() is not "":
-                                    non_empty += 1
-                        print("total:", total)
                         print("Ratio: ", non_white / total)
+
+                        file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
+                        print("Saving checkpoint model to %s" % file_path)
+                        torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
+                                                        loss_results=loss_results,
+                                                        wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
+                                   file_path)
 
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
 
