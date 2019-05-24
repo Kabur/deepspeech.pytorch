@@ -357,7 +357,7 @@ if __name__ == '__main__':
                     non_white = 0
                     total = 0
                     with torch.no_grad():
-                        for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
+                        for j, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
                             inputs, targets, input_percentages, target_sizes, filenames = data
                             input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
                             inputs = inputs.to(device)
@@ -411,7 +411,7 @@ if __name__ == '__main__':
         non_empty = 0
         total = 0
         with torch.no_grad():
-            for i, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
+            for j, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
                 inputs, targets, input_percentages, target_sizes, filenames = data
                 input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
                 inputs = inputs.to(device)
