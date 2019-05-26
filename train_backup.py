@@ -101,55 +101,6 @@ def to_np(x):
     return x.cpu().numpy()
 
 
-def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch):
-    non_white = 0
-    non_empty = 0
-    total = 0
-    total_wer = 0
-    total_cer = 0
-    with torch.no_grad():
-        for j, (test_data) in tqdm(enumerate(test_loader), total=len(test_loader)):
-            inputs, targets, input_percentages, target_sizes, filenames = test_data
-            input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
-            inputs = inputs.to(device)
-
-            # unflatten targets
-            split_targets = []
-            offset = 0
-            for size in target_sizes:
-                split_targets.append(targets[offset:offset + size])
-                offset += size
-
-            out, output_sizes = model(inputs, input_sizes)
-
-            decoded_output, _ = decoder.decode(out, output_sizes)
-            target_strings = decoder.convert_to_strings(split_targets)
-            wer, cer = 0, 0
-            for x in range(len(target_strings)):
-                transcript, reference = decoded_output[x][0], target_strings[x][0]
-                wer += decoder.wer(transcript, reference) / float(len(reference.split()))
-                cer += decoder.cer(transcript, reference) / float(len(reference))
-                total += 1
-                if transcript.lower().strip() is not "":
-                    non_white += 1
-                if transcript.lower() is not "":
-                    non_empty += 1
-            total_cer += cer
-            total_wer += wer
-            del out
-        wer = total_wer / len(test_loader.dataset)
-        cer = total_cer / len(test_loader.dataset)
-        wer *= 100
-        cer *= 100
-        loss_results[epoch] = avg_loss
-        wer_results[epoch] = wer
-        cer_results[epoch] = cer
-        print('\tAverage WER {wer:.3f}\tAverage CER {cer:.3f}\t'.format(wer=wer, cer=cer))
-        print("\t Non_white / Total ratio: ", non_white / total)
-
-        return wer, cer, loss_results, wer_results, cer_results
-
-
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -185,7 +136,6 @@ if __name__ == '__main__':
 
         args.train_manifest = "temp_train_man.csv"
         args.val_manifest = "temp_val_man.csv"
-
     # Set seeds for determinism
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -194,6 +144,10 @@ if __name__ == '__main__':
     # parser.add_argument('--train-manifest', metavar='DIR',
     #                     help='path to train manifest csv', default='data/train_manifest.csv')
     import csv
+    train_wavs = []
+    with open(args.train_manifest, "r") as file:
+        for row in file:
+            train_wavs.append(row.split(",")[0])
 
     device = torch.device("cuda" if args.cuda else "cpu")
     if args.mixed_precision and not args.cuda:
@@ -223,12 +177,8 @@ if __name__ == '__main__':
         print("Loading checkpoint model %s" % args.continue_from)
         package = torch.load(args.continue_from, map_location=lambda storage, loc: storage)
         model = DeepSpeech.load_model_package(package)
-        labels = model.labels
+        labels = model.labels 
         audio_conf = model.audio_conf
-
-        with open("manual_logs.pkl", "rb") as file:
-            stats = pickle.load(file)
-
         if not args.finetune:  # Don't want to restart training
             optim_state = package['optim_dict']
             start_epoch = int(package.get('epoch', 1)) - 1  # Index start at 0 for training
@@ -308,11 +258,8 @@ if __name__ == '__main__':
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    # if os.path.isfile("manual_logs.pkl"):
-    #     os.remove("manual_logs.pkl")
-
-    model.train()
-    stats = []
+    if os.path.isfile("debug_transcriptions.csv"):
+        os.remove("debug_transcriptions.csv")
 
     for epoch in range(start_epoch, args.epochs):
         transcriptions = []
@@ -320,11 +267,47 @@ if __name__ == '__main__':
         end = time.time()
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
+            # print("*"*100)
+            trans_parser = SpectrogramParser(model.audio_conf, normalize=True)
+            # sw2020A-ms98-a-0004.txt # WELL I MOSTLY LISTEN TO POPULAR MUSIC I UH
+            # audio_path = "/home/kabur/datasets/uhh/swb_processed/val/wav/sw2020A-ms98-a-0004.wav"
+
+            # random train file
+            rnd_index = random.randrange(0, len(train_wavs))
+            transcription = []
+            transcription.append(train_wavs[rnd_index])
+            wav_file = train_wavs[rnd_index]
+            txt_file = wav_file.replace("wav", "txt")
+
+            # print(txt_file)
+            with open(txt_file, "r") as file:
+                transcription.append(file.read())
+
+            decoded_output, decoded_offsets = transcribe(transcription[0], trans_parser, model, decoder, device)
+
+            results = []
+            for b in range(len(decoded_output)):
+                for pi in range(len(decoded_output[b])):
+                    result = {'transcription': decoded_output[b][pi]}
+                    results.append(result)
+            transcription.append(results)
+
+            # print("Target:", transcription[1])
+            # print("Output:", transcription[2])
+            transcription.append("\n")
+            transcriptions.append(" | ".join([str(thing) for thing in transcription]))
+            # delete the batch-model after every batch unless we run out of space quick
+            # cmd = "python /home/tomas/deepspeech.pytorch/transcribe.py --model-path " + model_save_path + " --audio-path " + wav_file
+            # print(cmd)
+            # cmd_out = os.popen(cmd).read()
+            # print(cmd_out)
+            # print("*"*100)
 
             if i == len(train_sampler):
                 break
             inputs, targets, input_percentages, target_sizes, filenames = data
             input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
+
 
             # measure data loading time
             data_time.update(time.time() - end)
@@ -382,22 +365,50 @@ if __name__ == '__main__':
                            file_path)
 
             if args.debug:
-                if (args.debug > 0 and i % args.debug == 0) or (
-                        args.debug < 0 and len(train_loader) - i <= abs(args.debug)):
+                if (args.debug > 0 and i % args.debug == 0) or (args.debug < 0 and len(train_loader) - i <= abs(args.debug)):
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
-                    wer, cer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch)
+                    model.eval()
+                    non_white = 0
+                    total = 0
+                    with torch.no_grad():
+                        for j, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
+                            inputs, targets, input_percentages, target_sizes, filenames = data
+                            input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
+                            inputs = inputs.to(device)
 
-                    file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
-                    print("Saving checkpoint model to %s" % file_path)
-                    torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
-                                                    loss_results=loss_results,
-                                                    wer_results=wer_results, cer_results=cer_results,
-                                                    avg_loss=avg_loss),
-                               file_path)
+                            # unflatten targets
+                            split_targets = []
+                            offset = 0
+                            for size in target_sizes:
+                                split_targets.append(targets[offset:offset + size])
+                                offset += size
+
+                            out, output_sizes = model(inputs, input_sizes)
+
+                            decoded_output, _ = decoder.decode(out, output_sizes)
+                            target_strings = decoder.convert_to_strings(split_targets)
+                            for x in range(len(target_strings)):
+                                transcript, reference = decoded_output[x][0], target_strings[x][0]
+                                total += 1
+                                if transcript.lower().strip() is not "":
+                                    non_white += 1
+                        print("Ratio: ", non_white / total)
+
+                        file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
+                        print("Saving checkpoint model to %s" % file_path)
+                        torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
+                                                        loss_results=loss_results,
+                                                        wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
+                                   file_path)
+                        model.train()
 
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
+
 
             del loss, out, float_out
+
+            with open("debug_transcriptions.csv", "w+") as file:
+                file.writelines(transcriptions)
 
 
         avg_loss /= len(train_sampler)
@@ -410,17 +421,64 @@ if __name__ == '__main__':
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
         """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
-        print('Validation Summary Epoch: [{0}]\t'.format(epoch + 1))
-        wer, cer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch)
+        model.eval()
+        non_white = 0
+        non_empty = 0
+        total = 0
+        with torch.no_grad():
+            for j, (data) in tqdm(enumerate(test_loader), total=len(test_loader)):
+                inputs, targets, input_percentages, target_sizes, filenames = data
+                input_sizes = input_percentages.mul_(int(inputs.size(3))).int()
+                inputs = inputs.to(device)
 
+                # unflatten targets
+                split_targets = []
+                offset = 0
+                for size in target_sizes:
+                    split_targets.append(targets[offset:offset + size])
+                    offset += size
+
+                out, output_sizes = model(inputs, input_sizes)
+
+                decoded_output, _ = decoder.decode(out, output_sizes)
+                target_strings = decoder.convert_to_strings(split_targets)
+                wer, cer = 0, 0
+                for x in range(len(target_strings)):
+                    transcript, reference = decoded_output[x][0], target_strings[x][0]
+                    wer += decoder.wer(transcript, reference) / float(len(reference.split()))
+                    cer += decoder.cer(transcript, reference) / float(len(reference))
+                    total += 1
+                    if transcript.lower().strip() is not "":
+                        non_white += 1
+                    if transcript.lower() is not "":
+                        non_empty += 1
+                total_cer += cer
+                total_wer += wer
+                del out
+            wer = total_wer / len(test_loader.dataset)
+            cer = total_cer / len(test_loader.dataset)
+            wer *= 100
+            cer *= 100
+            loss_results[epoch] = avg_loss
+            wer_results[epoch] = wer
+            cer_results[epoch] = cer
+            print('Validation Summary Epoch: [{0}]\t'
+                  'Average WER {wer:.3f}\t'
+                  'Average CER {cer:.3f}\t'.format(
+                epoch + 1, wer=wer, cer=cer))
+            ratios.append(non_white / total)
+            print("non_empty: ", non_empty)
+            print("non_white: ", non_white)
+            print("total: ", total)
+            print("non_white/total ratio: ", non_white / total)
+            print("all ratios:", ratios)
+
+        values = {
+            'loss_results': loss_results,
+            'cer_results': cer_results,
+            'wer_results': wer_results
+        }
         """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
-
-        stats.append({
-            'epoch:': epoch,
-            'avg_train_loss': avg_loss,
-            'avg_wer': wer,
-            'avg_cer': cer
-        })
 
         if args.visdom and main_proc:
             visdom_logger.update(epoch, values)
@@ -432,8 +490,6 @@ if __name__ == '__main__':
                 'Avg CER': cer
             }
 
-        with open("manual_logs.pkl", "wb+") as file:
-            pickle.dump(stats, file)
 
         if main_proc and args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
@@ -458,3 +514,5 @@ if __name__ == '__main__':
             if not args.no_shuffle:
                 print("Shuffling batches...")
                 train_sampler.shuffle(epoch)
+
+

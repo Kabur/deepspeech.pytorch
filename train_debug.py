@@ -101,12 +101,10 @@ def to_np(x):
     return x.cpu().numpy()
 
 
-def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch):
+def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, total_wer, total_cer, epoch):
     non_white = 0
     non_empty = 0
     total = 0
-    total_wer = 0
-    total_cer = 0
     with torch.no_grad():
         for j, (test_data) in tqdm(enumerate(test_loader), total=len(test_loader)):
             inputs, targets, input_percentages, target_sizes, filenames = test_data
@@ -145,9 +143,11 @@ def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results
         wer_results[epoch] = wer
         cer_results[epoch] = cer
         print('\tAverage WER {wer:.3f}\tAverage CER {cer:.3f}\t'.format(wer=wer, cer=cer))
-        print("\t Non_white / Total ratio: ", non_white / total)
+        print("\tnon_empty:", non_empty, "non_white:", non_white, "total:", total)
+        print("\tRatio: ", non_white / total)
 
-        return wer, cer, loss_results, wer_results, cer_results
+        return wer, loss_results, wer_results, cer_results
+
 
 
 class AverageMeter(object):
@@ -171,7 +171,7 @@ class AverageMeter(object):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    ratios = []
+
     if args.kabur:
         with open(args.train_manifest, "r") as file:
             train_man_content = file.read()
@@ -186,27 +186,20 @@ if __name__ == '__main__':
         args.train_manifest = "temp_train_man.csv"
         args.val_manifest = "temp_val_man.csv"
 
+    ratios = []
     # Set seeds for determinism
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
-    # parser.add_argument('--train-manifest', metavar='DIR',
-    #                     help='path to train manifest csv', default='data/train_manifest.csv')
-    import csv
+    train_wavs = []
 
-    device = torch.device("cuda" if args.cuda else "cpu")
-    if args.mixed_precision and not args.cuda:
-        raise ValueError('If using mixed precision training, CUDA must be enabled!')
-    args.distributed = args.world_size > 1
+    with open(args.train_manifest, "r") as file:
+        for row in file:
+            train_wavs.append(row.split(",")[0])
+
     main_proc = True
     device = torch.device("cuda" if args.cuda else "cpu")
-    if args.distributed:
-        if args.gpu_rank:
-            torch.cuda.set_device(int(args.gpu_rank))
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank)
-        main_proc = args.rank == 0  # Only the first proc should save models
     save_folder = args.save_folder
     os.makedirs(save_folder, exist_ok=True)  # Ensure save folder exists
 
@@ -219,64 +212,33 @@ if __name__ == '__main__':
         tensorboard_logger = TensorBoardLogger(args.id, args.log_dir, args.log_params)
 
     avg_loss, start_epoch, start_iter, optim_state = 0, 0, 0, None
-    if args.continue_from:  # Starting from previous model
-        print("Loading checkpoint model %s" % args.continue_from)
-        package = torch.load(args.continue_from, map_location=lambda storage, loc: storage)
-        model = DeepSpeech.load_model_package(package)
-        labels = model.labels
-        audio_conf = model.audio_conf
+    with open(args.labels_path) as label_file:
+        labels = str(''.join(json.load(label_file)))
 
-        with open("manual_logs.pkl", "rb") as file:
-            stats = pickle.load(file)
+    audio_conf = dict(sample_rate=args.sample_rate,
+                      window_size=args.window_size,
+                      window_stride=args.window_stride,
+                      window=args.window,
+                      noise_dir=args.noise_dir,
+                      noise_prob=args.noise_prob,
+                      noise_levels=(args.noise_min, args.noise_max))
 
-        if not args.finetune:  # Don't want to restart training
-            optim_state = package['optim_dict']
-            start_epoch = int(package.get('epoch', 1)) - 1  # Index start at 0 for training
-            start_iter = package.get('iteration', None)
-            if start_iter is None:
-                start_epoch += 1  # We saved model after epoch finished, start at the next epoch.
-                start_iter = 0
-            else:
-                start_iter += 1
-            avg_loss = int(package.get('avg_loss', 0))
-            loss_results, cer_results, wer_results = package['loss_results'], package['cer_results'], \
-                                                     package['wer_results']
-            if main_proc and args.visdom:  # Add previous scores to visdom graph
-                visdom_logger.load_previous_values(start_epoch, package)
-            if main_proc and args.tensorboard:  # Previous scores to tensorboard logs
-                tensorboard_logger.load_previous_values(start_epoch, package)
-    else:
-        with open(args.labels_path) as label_file:
-            labels = str(''.join(json.load(label_file)))
-
-        audio_conf = dict(sample_rate=args.sample_rate,
-                          window_size=args.window_size,
-                          window_stride=args.window_stride,
-                          window=args.window,
-                          noise_dir=args.noise_dir,
-                          noise_prob=args.noise_prob,
-                          noise_levels=(args.noise_min, args.noise_max))
-
-        rnn_type = args.rnn_type.lower()
-        assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
-        model = DeepSpeech(rnn_hidden_size=args.hidden_size,
-                           nb_layers=args.hidden_layers,
-                           labels=labels,
-                           rnn_type=supported_rnns[rnn_type],
-                           audio_conf=audio_conf,
-                           bidirectional=args.bidirectional,
-                           mixed_precision=args.mixed_precision)
+    rnn_type = args.rnn_type.lower()
+    assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
+    model = DeepSpeech(rnn_hidden_size=args.hidden_size,
+                       nb_layers=args.hidden_layers,
+                       labels=labels,
+                       rnn_type=supported_rnns[rnn_type],
+                       audio_conf=audio_conf,
+                       bidirectional=args.bidirectional,
+                       mixed_precision=args.mixed_precision)
 
     decoder = GreedyDecoder(labels)
     train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=args.train_manifest, labels=labels,
                                        normalize=True, augment=args.augment)
     test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=args.val_manifest, labels=labels,
                                       normalize=True, augment=False)
-    if not args.distributed:
-        train_sampler = BucketingSampler(train_dataset, batch_size=args.batch_size)
-    else:
-        train_sampler = DistributedBucketingSampler(train_dataset, batch_size=args.batch_size,
-                                                    num_replicas=args.world_size, rank=args.rank)
+    train_sampler = BucketingSampler(train_dataset, batch_size=args.batch_size)
     train_loader = AudioDataLoader(train_dataset,
                                    num_workers=args.num_workers, batch_sampler=train_sampler)
     test_loader = AudioDataLoader(test_dataset, batch_size=args.batch_size,
@@ -287,19 +249,10 @@ if __name__ == '__main__':
         train_sampler.shuffle(start_epoch)
 
     model = model.to(device)
-    if args.mixed_precision:
-        model = convert_model_to_half(model)
     parameters = model.parameters()
     optimizer = torch.optim.SGD(parameters, lr=args.lr,
                                 momentum=args.momentum, nesterov=True, weight_decay=1e-5)
-    if args.distributed:
-        model = DistributedDataParallel(model)
-    if args.mixed_precision:
-        optimizer = FP16_Optimizer(optimizer,
-                                   static_loss_scale=args.static_loss_scale,
-                                   dynamic_loss_scale=args.dynamic_loss_scale)
-    if optim_state is not None:
-        optimizer.load_state_dict(optim_state)
+
     print(model)
     print("Number of parameters: %d" % DeepSpeech.get_param_size(model))
 
@@ -308,18 +261,15 @@ if __name__ == '__main__':
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    # if os.path.isfile("manual_logs.pkl"):
-    #     os.remove("manual_logs.pkl")
-
-    model.train()
-    stats = []
+    if os.path.isfile("debug_transcriptions.csv"):
+        os.remove("debug_transcriptions.csv")
 
     for epoch in range(start_epoch, args.epochs):
         transcriptions = []
-        model.train()
         end = time.time()
         start_epoch_time = time.time()
         for i, (data) in enumerate(train_loader, start=start_iter):
+            model.train()
 
             if i == len(train_sampler):
                 break
@@ -338,23 +288,15 @@ if __name__ == '__main__':
             loss = criterion(float_out, targets, output_sizes, target_sizes).to(device)
             loss = loss / inputs.size(0)  # average the loss by minibatch
 
-            if args.distributed:
-                loss = loss.to(device)
-                loss_value = reduce_tensor(loss, args.world_size).item()
-            else:
-                loss_value = loss.item()
+            loss_value = loss.item()
 
             # Check to ensure valid loss was calculated
             valid_loss, error = check_loss(loss, loss_value)
             if valid_loss:
                 optimizer.zero_grad()
                 # compute gradient
-                if args.mixed_precision:
-                    optimizer.backward(loss)
-                    optimizer.clip_master_grads(args.max_norm)
-                else:
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
                 optimizer.step()
             else:
                 print(error)
@@ -373,19 +315,12 @@ if __name__ == '__main__':
                       'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                     (epoch + 1), (i + 1), len(train_sampler), batch_time=batch_time, data_time=data_time, loss=losses))
-            if args.checkpoint_per_batch > 0 and i > 0 and (i + 1) % args.checkpoint_per_batch == 0 and main_proc:
-                file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
-                print("Saving checkpoint model to %s" % file_path)
-                torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
-                                                loss_results=loss_results,
-                                                wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
-                           file_path)
 
             if args.debug:
                 if (args.debug > 0 and i % args.debug == 0) or (
                         args.debug < 0 and len(train_loader) - i <= abs(args.debug)):
                     """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
-                    wer, cer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch)
+                    wer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, 0, 0, epoch)
 
                     file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth' % (save_folder, epoch + 1, i + 1)
                     print("Saving checkpoint model to %s" % file_path)
@@ -399,6 +334,10 @@ if __name__ == '__main__':
 
             del loss, out, float_out
 
+            with open("debug_transcriptions.csv", "w+") as file:
+                for item in transcriptions:
+                    file.write(item)
+                    file.write("\n")
 
         avg_loss /= len(train_sampler)
 
@@ -408,33 +347,14 @@ if __name__ == '__main__':
               'Average Loss {loss:.3f}\t'.format(epoch + 1, epoch_time=epoch_time, loss=avg_loss))
 
         start_iter = 0  # Reset start iteration for next epoch
-        total_cer, total_wer = 0, 0
+
         """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
         print('Validation Summary Epoch: [{0}]\t'.format(epoch + 1))
-        wer, cer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch)
+        wer, loss_results, wer_results, cer_results = evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, 0, 0, epoch)
 
         """ $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ EVAL $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ """
 
-        stats.append({
-            'epoch:': epoch,
-            'avg_train_loss': avg_loss,
-            'avg_wer': wer,
-            'avg_cer': cer
-        })
-
-        if args.visdom and main_proc:
-            visdom_logger.update(epoch, values)
-        if args.tensorboard and main_proc:
-            tensorboard_logger.update(epoch, values, model.named_parameters())
-            values = {
-                'Avg Train Loss': avg_loss,
-                'Avg WER': wer,
-                'Avg CER': cer
-            }
-
-        with open("manual_logs.pkl", "wb+") as file:
-            pickle.dump(stats, file)
-
+        # Save the model
         if main_proc and args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
             torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
