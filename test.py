@@ -25,7 +25,6 @@ if __name__ == '__main__':
     torch.set_grad_enabled(False)
     device = torch.device("cuda" if args.cuda else "cpu")
     model = load_model(device, args.model_path, args.cuda)
-    model.train()
 
     if args.decoder == "beam":
         from decoder import BeamCTCDecoder

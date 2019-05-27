@@ -102,6 +102,7 @@ def to_np(x):
 
 
 def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results, avg_loss, epoch):
+    model.eval()
     non_white = 0
     non_empty = 0
     total = 0
@@ -146,6 +147,7 @@ def evaluate(model, test_loader, decoder, loss_results, wer_results, cer_results
         cer_results[epoch] = cer
         print('\tAverage WER {wer:.3f}\tAverage CER {cer:.3f}\t'.format(wer=wer, cer=cer))
         print("\t Non_white / Total ratio: ", non_white / total)
+        model.train()
 
         return wer, cer, loss_results, wer_results, cer_results
 

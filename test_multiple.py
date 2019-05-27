@@ -50,7 +50,7 @@ if __name__ == '__main__':
         print("Testing:", model_path)
         try:
             model = load_model(device, model_path, args.cuda)
-            model.train()
+            # model.train()
         except Exception as e:
             print("File " + model_path + " is probably not a model, skipping...")
 
