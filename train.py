@@ -52,7 +52,8 @@ parser.add_argument('--checkpoint-per-batch', default=0, type=int, help='Save ch
 parser.add_argument('--visdom', dest='visdom', action='store_true', help='Turn on visdom graphing')
 parser.add_argument('--tensorboard', dest='tensorboard', action='store_true', help='Turn on tensorboard graphing')
 parser.add_argument('--log-dir', default='visualize/deepspeech_final', help='Location of tensorboard log')
-parser.add_argument('--log-params', dest='log_params', action='store_true', help='Log parameter values and gradients')
+# parser.add_argument('--log-params', dest='log_params', action='store_true', help='Log parameter values and gradients')
+parser.add_argument('--log-params', dest='log_params', type=bool, default=True, help='Log parameter values and gradients')
 parser.add_argument('--id', default='Deepspeech training', help='Identifier for visdom/tensorboard run')
 parser.add_argument('--save-folder', default='models/', help='Location to save epoch models')
 parser.add_argument('--model-path', default='models/deepspeech_final.pth',
@@ -173,7 +174,6 @@ class AverageMeter(object):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    ratios = []
     if args.kabur:
         with open(args.train_manifest, "r") as file:
             train_man_content = file.read()
@@ -193,9 +193,6 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
-    # parser.add_argument('--train-manifest', metavar='DIR',
-    #                     help='path to train manifest csv', default='data/train_manifest.csv')
-    import csv
 
     device = torch.device("cuda" if args.cuda else "cpu")
     if args.mixed_precision and not args.cuda:
@@ -228,7 +225,7 @@ if __name__ == '__main__':
         labels = model.labels
         audio_conf = model.audio_conf
 
-        with open("manual_logs.pkl", "rb") as file:
+        with open("models/manual_logs.pkl", "rb") as file:
             stats = pickle.load(file)
 
         if not args.finetune:  # Don't want to restart training
@@ -310,10 +307,6 @@ if __name__ == '__main__':
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    # if os.path.isfile("manual_logs.pkl"):
-    #     os.remove("manual_logs.pkl")
-
-    model.train()
     stats = []
 
     for epoch in range(start_epoch, args.epochs):
@@ -424,6 +417,12 @@ if __name__ == '__main__':
             'avg_cer': cer
         })
 
+        values = {
+            'loss_results': loss_results,
+            'cer_results': cer_results,
+            'wer_results': wer_results
+        }
+
         if args.visdom and main_proc:
             visdom_logger.update(epoch, values)
         if args.tensorboard and main_proc:
@@ -434,7 +433,7 @@ if __name__ == '__main__':
                 'Avg CER': cer
             }
 
-        with open("manual_logs.pkl", "wb+") as file:
+        with open("models/manual_logs.pkl", "wb+") as file:
             pickle.dump(stats, file)
 
         if main_proc and args.checkpoint:
